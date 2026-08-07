@@ -85,6 +85,16 @@
                 "default": "0"
               },
               {
+                "name": "expectBody",
+                "text": "URL check: an optional match on the response body for it to count as up (in addition to the status). Same notation as --expect (regex:<pattern>, a substring, or a numeric comparison). Triggers a body fetch only when set.",
+                "default": ""
+              },
+              {
+                "name": "config",
+                "text": "Scope the monitor under a named profile in the registry (config.<profile>). One file can hold several independent monitor sets.",
+                "default": ""
+              },
+              {
                 "name": "configFile",
                 "text": "Registry YAML file that stores the monitors.",
                 "default": "uptime.yaml"
@@ -108,6 +118,11 @@
                 "name": "configFile",
                 "text": "Registry YAML file that stores the monitors.",
                 "default": "uptime.yaml"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
               }
             ]
           }
@@ -124,6 +139,11 @@
                 "name": "configFile",
                 "text": "Registry YAML file that stores the monitors.",
                 "default": "uptime.yaml"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
               }
             ]
           }
@@ -154,6 +174,16 @@
                 "name": "db",
                 "text": "aux4/repository database file where checks are stored.",
                 "default": "~/.aux4.config/uptime.db"
+              },
+              {
+                "name": "retention",
+                "text": "Days to keep each check before it auto-expires (0 = keep forever). Older checks are hidden from reads and removable with `uptime prune`.",
+                "default": "90"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
               }
             ]
           }
@@ -180,6 +210,16 @@
                 "name": "db",
                 "text": "aux4/repository database file where checks are stored.",
                 "default": "~/.aux4.config/uptime.db"
+              },
+              {
+                "name": "retention",
+                "text": "Days to keep each check before it auto-expires (0 = keep forever). Older checks are hidden from reads and removable with `uptime prune`.",
+                "default": "90"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
               }
             ]
           }
@@ -196,6 +236,11 @@
                 "name": "name",
                 "text": "Limit to a single monitor. Omit for all monitors.",
                 "default": ""
+              },
+              {
+                "name": "window",
+                "text": "Rolling uptime window in days; also bounds how many stored checks are read (0 = all retained).",
+                "default": "90"
               },
               {
                 "name": "chart",
@@ -231,6 +276,11 @@
                 "name": "db",
                 "text": "aux4/repository database file where checks are stored.",
                 "default": "~/.aux4.config/uptime.db"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
               }
             ]
           }
@@ -297,6 +347,27 @@
                 "name": "db",
                 "text": "aux4/repository database file where checks are stored.",
                 "default": "~/.aux4.config/uptime.db"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "prune",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs prune value(*)"
+          ],
+          "help": {
+            "text": "Physically delete expired checks (past their retention ttl) from the database to reclaim disk. Expired checks are already hidden from reads; this removes them for good.",
+            "variables": [
+              {
+                "name": "db",
+                "text": "aux4/repository database file where checks are stored.",
+                "default": "~/.aux4.config/uptime.db"
               }
             ]
           }
@@ -341,6 +412,11 @@
                 "name": "db",
                 "text": "aux4/repository database file where checks are stored.",
                 "default": "~/.aux4.config/uptime.db"
+              },
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>).",
+                "default": ""
               }
             ]
           }

@@ -8,6 +8,8 @@ sleep 1
 aux4 uptime add --url http://127.0.0.1:8477/ok   --name up200   --expectedStatus 200 --configFile srv.yaml >/dev/null
 aux4 uptime add --url http://127.0.0.1:8477/down --name down503 --expectedStatus 200 --configFile srv.yaml >/dev/null
 aux4 uptime add --url http://127.0.0.1:8477/down --name any3xx --expectedStatus "200-599" --configFile srv.yaml >/dev/null
+aux4 uptime add --url http://127.0.0.1:8477/ok   --name bodyok  --expectedStatus 200 --expectBody "200" --configFile srv.yaml >/dev/null
+aux4 uptime add --url http://127.0.0.1:8477/ok   --name bodybad --expectedStatus 200 --expectBody "zzz" --configFile srv.yaml >/dev/null
 aux4 uptime check-all --configFile srv.yaml --db srv.db --timeout 5000 >/dev/null 2>&1
 ```
 
@@ -54,6 +56,26 @@ aux4 uptime status --name any3xx --configFile srv.yaml --db srv.db | grep -o '"s
 
 ```expect
 "state":"up"
+```
+
+### expectBody matching the response body is up
+
+```execute
+aux4 uptime status --name bodyok --configFile srv.yaml --db srv.db | grep -o '"state":"up"'
+```
+
+```expect
+"state":"up"
+```
+
+### expectBody NOT matching the body is down (even with a 200)
+
+```execute
+aux4 uptime status --name bodybad --configFile srv.yaml --db srv.db | grep -o '"state":"down"'
+```
+
+```expect
+"state":"down"
 ```
 
 ## unreachable host

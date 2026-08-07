@@ -90,6 +90,12 @@ For URL checks, everything outside the expected set — including 4xx/5xx, conne
 
 For command checks, `--exit` overrides the healthy exit code (default `0`). A numeric comparison like `>0` parses the command's stdout as a number — great for `aux4 repository count …` which prints a bare integer; for JSON output (e.g. `aux4 db … execute` returns `[{"n":2}]`) use a `regex:` match.
 
+For URL checks, `--expectBody` additionally requires the **response body** to match (same notation), so a health endpoint that returns `200` with an unhealthy payload is still caught:
+
+```bash
+aux4 uptime add --url https://api.example.com/health --expectedStatus 200 --expectBody 'regex:"status":\s*"ok"'
+```
+
 ## Commands
 
 | Command | What it does |
@@ -99,9 +105,10 @@ For command checks, `--exit` overrides the healthy exit code (default `0`). A nu
 | `aux4 uptime remove --name <name>` | Unregister a monitor |
 | `aux4 uptime list` | List registered monitors |
 | `aux4 uptime check --name <name>` | Probe one monitor now and record it |
-| `aux4 uptime check-all` | Probe every monitor (the scheduled command) |
-| `aux4 uptime status [--name <name>] [--chart]` | Current up/down + rolling uptime (with `--chart`, also the strips) |
+| `aux4 uptime check-all` | Probe every monitor concurrently (the scheduled command) |
+| `aux4 uptime status [--name <name>] [--chart]` | Current up/down + rolling uptime over `--window` days (with `--chart`, also the strips) |
 | `aux4 uptime chart [--name <name>]` | Render the uptime strip(s) — all monitors by default |
+| `aux4 uptime prune` | Delete expired checks (past their retention) to reclaim disk |
 | `aux4 uptime start` | Start the scheduler daemon (run after each reboot) |
 | `aux4 uptime stop` | Stop the scheduler daemon |
 | `aux4 uptime schedule --interval <every>` | Schedule recurring checks via cron |
@@ -181,6 +188,16 @@ Checks are stored with [`aux4/repository`](https://hub.aux4.io/aux4/repository) 
   "timedOut": 0, "checkedAt": "2026-08-06T12:00:05.000Z",
   "command": "aux4 db sqlite execute ...", "exitCode": 0 }
 ```
+
+### Retention & history
+
+Every check is written with a **retention ttl** (`--retention`, default **90 days**). Expired checks are automatically hidden from `status` and `chart`, so history never grows without bound and reads stay bounded to the window you actually query. To reclaim disk, physically delete expired rows:
+
+```bash
+aux4 uptime prune            # aux4 repository clean under the hood
+```
+
+`status --window <days>` (default 90) sets the rolling-uptime window and, together with the retention and per-chart bounds, means uptime only ever reads the slice of history it needs — not the whole table. Set `--retention 0` to keep checks forever.
 
 ## Charting
 

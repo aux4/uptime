@@ -227,61 +227,62 @@ function nameFromUrl(url) {
 // a URL monitor probed over HTTP. Both share the timer/timeout wrapper.
 function runCheck(monitor, timeoutMs) {
   if (monitor.command) return probeCommand(monitor.command, monitor.expect, timeoutMs);
-  return probeUrl(monitor.url, monitor.expectedStatus || "2XX", timeoutMs);
+  return probeUrl(monitor.url, monitor.expectedStatus || "2XX", timeoutMs, monitor.expectBody);
 }
 
-// Probe a URL via `aux4 curl request --status`, which prints just the numeric
-// HTTP status (exit 0 for any status class) or exits non-zero with empty stdout
-// on a transport failure (DNS/refused/TLS/timeout). curl's `--maxTime` bounds
-// the request; we still measure the round trip ourselves and keep a hard-kill
-// backstop. Resolves to a check result and never rejects.
-function probeUrl(url, expectedStatus, timeoutMs) {
+// Run one `aux4 curl request` with a hard-kill backstop past its own --maxTime.
+// Resolves to { out, timedOut }; never rejects.
+function curlRun(extraArgs, timeoutMs) {
   return new Promise(resolve => {
-    const started = Date.now();
     let settled = false;
     let out = "";
     const maxTime = Math.max(1, Math.ceil(timeoutMs / 1000));
-    const child = spawn(
-      "aux4",
-      ["curl", "request", "--method", "GET", "--status", "true", "--maxTime", String(maxTime), url],
-      { stdio: ["ignore", "pipe", "ignore"] }
-    );
-
-    const finish = (status, timedOut) => {
+    const child = spawn("aux4", ["curl", "request", "--method", "GET", "--maxTime", String(maxTime), ...extraArgs], {
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    const finish = timedOut => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      const responseMs = Date.now() - started;
-      const up = !timedOut && status !== 0 && outputMatches(status, expectedStatus) ? 1 : 0;
-      resolve({
-        kind: "http",
-        httpStatus: status,
-        up,
-        responseMs,
-        timedOut: !!timedOut,
-        checkedAt: new Date().toISOString()
-      });
+      resolve({ out: out.trim(), timedOut });
     };
-
-    // Backstop in case curl itself hangs past its own --maxTime.
     const timer = setTimeout(() => {
       try {
         child.kill("SIGKILL");
       } catch {
         /* ignore */
       }
-      finish(0, true);
+      finish(true);
     }, timeoutMs + 1000);
-
     child.stdout.on("data", d => (out += d));
-    child.on("error", () => finish(0, false)); // e.g. aux4 not on PATH
-    child.on("close", () => {
-      // Just the status code on success; empty (exit non-zero) on transport
-      // failure or curl's own timeout -> status 0 (down / unreachable).
-      const trimmed = out.trim();
-      finish(/^\d+$/.test(trimmed) ? Number(trimmed) : 0, false);
-    });
+    child.on("error", () => finish(false)); // e.g. aux4 not on PATH
+    child.on("close", () => finish(false));
   });
+}
+
+// Probe a URL. `curl request --status` prints just the numeric HTTP status
+// (exit 0 for any class) or empty on a transport failure (status 0 = down). When
+// `expectBody` is set and the status is good, a second fetch grabs the response
+// body and it must also match. Never rejects.
+async function probeUrl(url, expectedStatus, timeoutMs, expectBody) {
+  const started = Date.now();
+  const statusRes = await curlRun(["--status", "true", url], timeoutMs);
+  const status = statusRes.timedOut || !/^\d+$/.test(statusRes.out) ? 0 : Number(statusRes.out);
+  let up = !statusRes.timedOut && status !== 0 && outputMatches(status, expectedStatus) ? 1 : 0;
+
+  if (up && expectBody) {
+    const bodyRes = await curlRun([url], timeoutMs);
+    up = !bodyRes.timedOut && outputMatches(bodyRes.out, expectBody) ? 1 : 0;
+  }
+
+  return {
+    kind: "http",
+    httpStatus: status,
+    up,
+    responseMs: Date.now() - started,
+    timedOut: !!statusRes.timedOut,
+    checkedAt: new Date().toISOString()
+  };
 }
 
 // Probe by running an arbitrary command (a DB query, a script, another aux4
@@ -330,8 +331,10 @@ function probeCommand(command, expect, timeoutMs) {
 }
 
 // Persist a check to aux4/repository. `up` is stored as 1/0 so repository's
-// numeric --expr comparisons behave. Returns true on success.
-function recordCheck(db, monitor, result, profile) {
+// numeric --expr comparisons behave. When retentionDays > 0 the record is
+// written with a matching ttl, so old checks auto-expire (hidden from reads, and
+// physically removable via `uptime prune`). Returns true on success.
+function recordCheck(db, monitor, result, profile, retentionDays) {
   const record = {
     profile: profile || "",
     name: monitor.name,
@@ -349,11 +352,9 @@ function recordCheck(db, monitor, result, profile) {
     record.expectedStatus = monitor.expectedStatus;
     record.httpStatus = result.httpStatus;
   }
-  const res = spawnSync(
-    "aux4",
-    ["repository", "write", "checks", "--db", db, "--data", JSON.stringify(record)],
-    { stdio: ["ignore", "ignore", "inherit"] }
-  );
+  const args = ["repository", "write", "checks", "--db", db, "--data", JSON.stringify(record)];
+  if (retentionDays > 0) args.push("--ttl", String(Math.round(retentionDays * 86400)));
+  const res = spawnSync("aux4", args, { stdio: ["ignore", "ignore", "inherit"] });
   return res.status === 0;
 }
 
@@ -399,7 +400,8 @@ function evaluateAlerts(db, monitor, globals, result) {
   const onRecover = firstDefined(monitor.onRecover, globals.onRecover);
   if (!onAlert && !onRecover) return;
 
-  const checks = readChecks(db, monitor.name, globals.profile); // newest-first, includes this check
+  // Only need enough recent rows to measure the current/previous down streak.
+  const checks = readChecks(db, monitor.name, globals.profile, { limit: threshold + 2 });
 
   if (!result.up) {
     // Count the current consecutive-down streak (from newest).
@@ -420,18 +422,26 @@ function evaluateAlerts(db, monitor, globals, result) {
   }
 }
 
-// Read every stored check for a monitor (or all monitors when name is null),
-// scoped to the given profile, tolerating repository's exit-4-on-empty.
-// Returns an array (possibly empty).
-function readChecks(db, name, profile) {
+// ISO timestamp for `days` days before now (UTC), used to bound reads by window.
+function daysAgoIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+}
+
+// Read stored checks for a monitor (or all monitors when name is null), scoped
+// to the profile, tolerating repository's exit-4-on-empty. Options bound the
+// read so we never pull the whole table: `since` (ISO) filters by checkedAt, and
+// `limit` caps the row count (newest first). Expired records (ttl) are already
+// excluded by the repository. Returns an array (possibly empty), newest-first.
+function readChecks(db, name, profile, opts = {}) {
   const esc = v => String(v).replace(/'/g, "");
   const parts = [name ? `name = '${esc(name)}'` : "up >= 0", `profile = '${esc(profile || "")}'`];
+  if (opts.since) parts.push(`checkedAt >= '${esc(opts.since)}'`);
   const expr = parts.join(" and ");
-  const res = spawnSync(
-    "aux4",
-    ["repository", "find", "checks", "--db", db, "--expr", expr, "--sort", "createdAt desc", "--render", "none"],
-    { encoding: "utf8" }
-  );
+  const args = ["repository", "find", "checks", "--db", db, "--expr", expr, "--sort", "createdAt desc", "--render", "none"];
+  if (opts.limit) args.push("--limit", String(opts.limit));
+  const res = spawnSync("aux4", args, { encoding: "utf8" });
   const out = (res.stdout || "").trim();
   if (!out || out === "[]") return [];
   try {
@@ -522,7 +532,9 @@ function cmdAdd(params) {
   if (url) {
     const expectedStatus = opt(params, "expectedStatus", "2XX");
     monitor = { name, url, expectedStatus };
-    summary = `${url} (expects ${expectedStatus})`;
+    const expectBody = opt(params, "expectBody", "");
+    if (expectBody !== "") monitor.expectBody = expectBody;
+    summary = expectBody ? `${url} (expects ${expectedStatus}, body ${expectBody})` : `${url} (expects ${expectedStatus})`;
   } else {
     monitor = { name, command };
     const exit = opt(params, "exit", "");
@@ -582,6 +594,7 @@ async function cmdCheck(params) {
   const db = resolvePath(opt(params, "db", "~/.aux4.config/uptime.db"));
   const profile = opt(params, "config", "");
   const timeout = Number(opt(params, "timeout", 10000)) || 10000;
+  const retention = Number(opt(params, "retention", 90));
   const name = opt(params, "name", "");
   if (!name) fail("check needs --name <name>. (Use check-all for every monitor.)", 2);
 
@@ -590,7 +603,7 @@ async function cmdCheck(params) {
   if (!monitor) fail(`no monitor named "${name}".`, 3);
 
   const result = await runCheck(monitor, timeout);
-  recordCheck(db, monitor, result, profile);
+  recordCheck(db, monitor, result, profile, retention);
   evaluateAlerts(db, monitor, cfg, result);
   process.stdout.write(formatCheckLine(monitor, result) + "\n");
   process.exit(result.up ? 0 : 1);
@@ -601,18 +614,22 @@ async function cmdCheckAll(params) {
   const db = resolvePath(opt(params, "db", "~/.aux4.config/uptime.db"));
   const profile = opt(params, "config", "");
   const timeout = Number(opt(params, "timeout", 10000)) || 10000;
+  const retention = Number(opt(params, "retention", 90));
 
   const cfg = readConfig(configFile, profile);
   if (!cfg.monitors.length) {
     process.stdout.write("No monitors registered. Add one with: aux4 uptime add --url <url>\n");
     return; // headless-safe: exit 0
   }
-  for (const monitor of cfg.monitors) {
-    const result = await runCheck(monitor, timeout);
-    recordCheck(db, monitor, result, profile);
+  // Probe all monitors concurrently (the slow, network-bound part), then record
+  // and evaluate alerts in registry order so the output is stable.
+  const results = await Promise.all(cfg.monitors.map(m => runCheck(m, timeout)));
+  cfg.monitors.forEach((monitor, i) => {
+    const result = results[i];
+    recordCheck(db, monitor, result, profile, retention);
     evaluateAlerts(db, monitor, cfg, result);
     process.stdout.write(formatCheckLine(monitor, result) + "\n");
-  }
+  });
 }
 
 function formatCheckLine(monitor, result) {
@@ -634,11 +651,15 @@ async function cmdStatus(params) {
   const db = resolvePath(opt(params, "db", "~/.aux4.config/uptime.db"));
   const profile = opt(params, "config", "");
   const only = opt(params, "name", "");
+  // Rolling uptime is computed over a window (default 90 days), which also bounds
+  // how many rows we read back per monitor.
+  const window = Number(opt(params, "window", 90));
+  const since = window > 0 ? daysAgoIso(window) : undefined;
   const monitors = readConfig(configFile, profile).monitors.filter(m => !only || String(m.name) === String(only));
   if (!monitors.length) fail(only ? `no monitor named "${only}".` : "no monitors registered.", 3);
 
   const rows = monitors.map(m => {
-    const checks = readChecks(db, m.name, profile); // newest first
+    const checks = readChecks(db, m.name, profile, { since }); // newest first, within window
     const latest = checks[0];
     const total = checks.length;
     const up = checks.reduce((n, r) => n + (Number(r.up) ? 1 : 0), 0);
@@ -652,7 +673,8 @@ async function cmdStatus(params) {
       lastResponseMs: latest ? latest.responseMs : null,
       lastCheckedAt: latest ? latest.checkedAt : null,
       uptimePct: total ? Number(((100 * up) / total).toFixed(2)) : null,
-      checks: total
+      checks: total,
+      windowDays: window
     };
   });
 
@@ -709,7 +731,12 @@ function perMonitorOutput(output, name, multiple) {
 // --output save message or an inline terminal preview reaches the user.
 // Resolves to the child's exit code; never rejects.
 function renderChart({ db, profile, name, period, days, bars, output, width, height, theme, format, title }) {
-  const records = readChecks(db, name || null, profile);
+  // Bound the read to exactly what the strip needs: the last N checks for the
+  // per-check view, or the day window for the daily view.
+  const records =
+    period === "check"
+      ? readChecks(db, name || null, profile, { limit: bars })
+      : readChecks(db, name || null, profile, { since: daysAgoIso(days) });
 
   let series;
   let xcol;
@@ -791,6 +818,18 @@ async function cmdChart(params) {
     if (code) bad = code;
   }
   if (bad) fail("failed to render chart — is aux4/chart installed?", 5);
+}
+
+// Physically remove expired checks (ttl in the past) to reclaim disk. Checks
+// are written with a ttl by check/check-all's --retention, and are already
+// hidden from reads once expired; this deletes them for good.
+function cmdPrune(params) {
+  const db = resolvePath(opt(params, "db", "~/.aux4.config/uptime.db"));
+  const res = spawnSync("aux4", ["repository", "clean", "--db", db], { encoding: "utf8" });
+  if (res.status !== 0) {
+    fail(`could not prune. ${(res.stderr || res.stdout || "").trim()}`, 5);
+  }
+  process.stdout.write(`Pruned expired checks from ${db}.\n`);
 }
 
 // The uptime scheduler runs on its OWN aux4/cron daemon (a dedicated dir + port,
@@ -914,6 +953,8 @@ async function main() {
       return cmdStatus(params);
     case "chart":
       return cmdChart(params);
+    case "prune":
+      return cmdPrune(params);
     case "start":
       return cmdStart(params);
     case "stop":

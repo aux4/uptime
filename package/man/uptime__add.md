@@ -11,7 +11,7 @@ Every command accepts `--config <profile>` to scope the registry under a named s
 #### Usage
 
 ```bash
-aux4 uptime add --url <url> [--name <name>] [--expectedStatus <spec>] [--configFile <file>] [--config <profile>]
+aux4 uptime add --url <url> [--name <name>] [--expectedStatus <spec>] [--expectBody <spec>] [--configFile <file>] [--config <profile>]
 aux4 uptime add --command <cmd> --name <name> [--expect <spec>] [--exit <code>] [--configFile <file>] [--config <profile>]
 ```
 
@@ -19,6 +19,7 @@ aux4 uptime add --command <cmd> --name <name> [--expect <spec>] [--exit <code>] 
 --command         A command to run as the check (command check) — a DB query, a script, any aux4 command. Up when it exits 0 (see --expect/--exit). Provide this OR --url.
 --name            A short name for the monitor. Defaults to the URL host for --url; required for --command.
 --expectedStatus  URL check: which HTTP responses count as up — an exact code (200), a class (2XX), a numeric range (200-402), or a comma-separated union (200-399,405). Default: 2XX.
+--expectBody      URL check: an optional match on the response body for it to count as up, in addition to the status. Same notation as --expect (regex:<pattern>, a substring, or a numeric comparison); triggers a body fetch only when set.
 --expect          Command check: an optional match on the command's output — same notation as --expectedStatus, plus comparisons (>0, >=1, <100, =5), regex:<pattern>, or a plain substring.
 --exit            Command check: the exit code that counts as up (default: 0).
 --configFile      Registry YAML file that stores the monitors (default: uptime.yaml).
@@ -28,6 +29,7 @@ aux4 uptime add --command <cmd> --name <name> [--expect <spec>] [--exit <code>] 
 
 ```bash
 aux4 uptime add --url https://api.example.com/health --name api --expectedStatus 200
+aux4 uptime add --url https://api.example.com/health --name api-body --expectBody healthy
 aux4 uptime add --command "aux4 db sqlite execute --file app.db --query 'SELECT 1'" --name db-reachable
 aux4 uptime add --command "aux4 repository count --db app.db --table orders" --name has-orders --expect ">0"
 ```
