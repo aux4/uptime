@@ -36,3 +36,23 @@ aux4 uptime unschedule >/dev/null 2>&1 && aux4 cron list --port 8422 | grep -c "
 ```expect
 0
 ```
+
+## custom port
+
+```afterAll
+aux4 uptime stop --port 8531 >/dev/null 2>&1
+```
+
+```timeout
+60000
+```
+
+### start honors an explicit --port
+
+```execute
+aux4 uptime start --port 8531 >/dev/null 2>&1 && aux4 cron list --port 8531 >/dev/null 2>&1 && echo reachable
+```
+
+```expect
+reachable
+```

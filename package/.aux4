@@ -383,7 +383,24 @@
             "node ${packageDir}/lib/uptime.mjs start value(*)"
           ],
           "help": {
-            "text": "Start the uptime scheduler — the aux4/cron daemon (on a dedicated port) that runs the scheduled checks. Idempotent. Run this once, and again after a machine reboot, so scheduled checks keep firing."
+            "text": "Start the uptime scheduler — the aux4/cron daemon (on a dedicated port) that runs the scheduled checks. Idempotent. Run this once, and again after a machine reboot, so scheduled checks keep firing.",
+            "variables": [
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>); also selects a per-profile `port` if set.",
+                "default": ""
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file (used to source the scheduler `port`).",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "port",
+                "text": "Scheduler cron daemon port. Defaults to a `port` value in the registry (per --config profile), else 8422. Override to run on a specific port (e.g. to share an existing cron daemon).",
+                "default": ""
+              }
+            ]
           }
         },
         {
@@ -392,7 +409,24 @@
             "node ${packageDir}/lib/uptime.mjs stop value(*)"
           ],
           "help": {
-            "text": "Stop the uptime scheduler daemon. Scheduled checks stop firing; the schedule entries persist and resume when you start it again. Only affects uptime's scheduler, not other aux4/cron jobs."
+            "text": "Stop the uptime scheduler daemon. Scheduled checks stop firing; the schedule entries persist and resume when you start it again. Only affects uptime's scheduler, not other aux4/cron jobs.",
+            "variables": [
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>); also selects a per-profile `port` if set.",
+                "default": ""
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file (used to source the scheduler `port`).",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "port",
+                "text": "Scheduler cron daemon port. Defaults to a `port` value in the registry (per --config profile), else 8422. Override to run on a specific port (e.g. to share an existing cron daemon).",
+                "default": ""
+              }
+            ]
           }
         },
         {
@@ -422,6 +456,11 @@
                 "name": "config",
                 "text": "Scope to a named profile in the registry (config.<profile>).",
                 "default": ""
+              },
+              {
+                "name": "port",
+                "text": "Scheduler cron daemon port. Defaults to a `port` value in the registry (per --config profile), else 8422. Override to run on a specific port (e.g. to share an existing cron daemon).",
+                "default": ""
               }
             ]
           }
@@ -432,7 +471,24 @@
             "node ${packageDir}/lib/uptime.mjs unschedule value(*)"
           ],
           "help": {
-            "text": "Remove the recurring 'uptime-check' schedule from aux4/cron."
+            "text": "Remove the recurring 'uptime-check' schedule from aux4/cron.",
+            "variables": [
+              {
+                "name": "config",
+                "text": "Scope to a named profile in the registry (config.<profile>); also selects a per-profile `port` if set.",
+                "default": ""
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file (used to source the scheduler `port`).",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "port",
+                "text": "Scheduler cron daemon port. Defaults to a `port` value in the registry (per --config profile), else 8422. Override to run on a specific port (e.g. to share an existing cron daemon).",
+                "default": ""
+              }
+            ]
           }
         }
       ]

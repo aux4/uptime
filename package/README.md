@@ -230,7 +230,17 @@ aux4 uptime stop                         # stop the scheduler daemon
 
 Intervals are human-readable: `30s`, `5 min`, `2 hours`, etc. With `--config <profile>`, the cron job is named per profile (`uptime-check-<profile>`) so profiles schedule independently.
 
-> The scheduler is a background daemon and **does not survive a machine reboot**. After a reboot, run `aux4 uptime start` to bring it back up; while it is down, no checks run. (You can inspect it directly with `aux4 cron list --port 8422`.)
+**Choosing the port.** By default the scheduler owns port `8422` (dir `~/.aux4.config/uptime`). Override it with `--port`, or persist it in the registry so you set it once — resolution is **`--port` flag → registry `port` value → `8422`**:
+
+```bash
+aux4 config set --name port --value 8500 --file uptime.yaml   # persist per registry/profile
+aux4 uptime start                                             # now uses 8500
+aux4 uptime schedule --port 8421 --interval "5 min"           # or share an existing cron daemon on the fly
+```
+
+Each distinct port gets its own daemon directory, so multiple schedulers never clash.
+
+> The scheduler is a background daemon and **does not survive a machine reboot**. After a reboot, run `aux4 uptime start` to bring it back up; while it is down, no checks run. (You can inspect it directly with `aux4 cron list --port <port>`.)
 
 ## License
 

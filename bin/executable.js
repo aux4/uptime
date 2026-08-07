@@ -848,16 +848,29 @@ function cmdPrune(params) {
 // The uptime scheduler runs on its OWN aux4/cron daemon (a dedicated dir + port,
 // separate from cron's default 8421) so `uptime stop` only ever affects uptime's
 // schedule, never someone else's cron jobs.
-const CRON_DIR = "~/.aux4.config/uptime";
-const CRON_PORT = "8422";
+const DEFAULT_CRON_PORT = "8422";
 
 function scheduleName(profile) {
   return profile ? `uptime-check-${profile}` : "uptime-check";
 }
 
-// Is the uptime cron daemon reachable? (a harmless `list` round-trips to it.)
-function cronReachable() {
-  return spawnSync("aux4", ["cron", "list", "--port", CRON_PORT], { stdio: "ignore" }).status === 0;
+// Resolve the scheduler port: an explicit --port wins, else a `port` value in
+// the registry (scoped to the profile via --config), else the default 8422.
+function resolveCronPort(params, configFile, profile) {
+  const flag = opt(params, "port", "");
+  if (flag) return String(flag);
+  const fromConfig = configFile ? getConfigValue(configFile, profile, "port") : "";
+  return fromConfig || DEFAULT_CRON_PORT;
+}
+
+// Each distinct port gets its own daemon dir so their .cron.json never collide.
+function cronDirFor(port) {
+  return port === DEFAULT_CRON_PORT ? "~/.aux4.config/uptime" : `~/.aux4.config/uptime-${port}`;
+}
+
+// Is the cron daemon on `port` reachable? (a harmless `list` round-trips to it.)
+function cronReachable(port) {
+  return spawnSync("aux4", ["cron", "list", "--port", port], { stdio: "ignore" }).status === 0;
 }
 
 // Coarse synchronous sleep (this is a short-lived CLI process; blocking is fine).
@@ -865,53 +878,60 @@ function sleepMs(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-// Start the uptime scheduler daemon if it isn't already up, and wait until it
+// Start the scheduler daemon on `port` if it isn't already up, and wait until it
 // answers so a following `cron add` can't race it. Returns true when reachable.
-function ensureCronRunning() {
-  if (cronReachable()) return true;
-  fs.mkdirSync(resolvePath(CRON_DIR), { recursive: true });
+function ensureCronRunning(port) {
+  if (cronReachable(port)) return true;
+  const dir = resolvePath(cronDirFor(port));
+  fs.mkdirSync(dir, { recursive: true });
   // `cron start` blocks in the foreground, so launch it detached via aux4/jobs.
-  spawnSync("aux4", ["jobs", "run", `aux4 cron start --dir ${resolvePath(CRON_DIR)} --port ${CRON_PORT}`], {
-    stdio: "ignore"
-  });
+  spawnSync("aux4", ["jobs", "run", `aux4 cron start --dir ${dir} --port ${port}`], { stdio: "ignore" });
   for (let i = 0; i < 40; i++) {
-    if (cronReachable()) return true;
+    if (cronReachable(port)) return true;
     sleepMs(250);
   }
   return false;
 }
 
-function cmdStart() {
-  if (cronReachable()) {
-    process.stdout.write(`The uptime scheduler is already running (cron daemon on port ${CRON_PORT}).\n`);
+function cmdStart(params) {
+  const configFile = opt(params, "configFile", "uptime.yaml");
+  const profile = opt(params, "config", "");
+  const port = resolveCronPort(params, configFile, profile);
+  if (cronReachable(port)) {
+    process.stdout.write(`The uptime scheduler is already running (cron daemon on port ${port}).\n`);
     return;
   }
-  if (!ensureCronRunning()) {
+  if (!ensureCronRunning(port)) {
     fail("could not start the uptime scheduler (cron daemon did not come up).", 5);
   }
-  process.stdout.write(`Started the uptime scheduler (cron daemon on port ${CRON_PORT}, dir ${CRON_DIR}).\n`);
+  process.stdout.write(`Started the uptime scheduler (cron daemon on port ${port}, dir ${cronDirFor(port)}).\n`);
 }
 
-function cmdStop() {
-  if (!cronReachable()) {
+function cmdStop(params) {
+  const configFile = opt(params, "configFile", "uptime.yaml");
+  const profile = opt(params, "config", "");
+  const port = resolveCronPort(params, configFile, profile);
+  if (!cronReachable(port)) {
     process.stdout.write("The uptime scheduler is not running.\n");
     return;
   }
-  const res = spawnSync("aux4", ["cron", "stop", "--port", CRON_PORT], { encoding: "utf8" });
+  const res = spawnSync("aux4", ["cron", "stop", "--port", port], { encoding: "utf8" });
   if (res.status !== 0) {
     fail(`could not stop the uptime scheduler. ${(res.stderr || res.stdout || "").trim()}`, 5);
   }
-  process.stdout.write("Stopped the uptime scheduler.\n");
+  process.stdout.write(`Stopped the uptime scheduler (port ${port}).\n`);
 }
 
 function cmdSchedule(params) {
   const profile = opt(params, "config", "");
-  const configFile = resolvePath(opt(params, "configFile", "uptime.yaml"));
+  const configFileRaw = opt(params, "configFile", "uptime.yaml");
+  const configFile = resolvePath(configFileRaw);
   const db = resolvePath(opt(params, "db", "~/.aux4.config/uptime.db"));
   const interval = opt(params, "interval", "5 min");
+  const port = resolveCronPort(params, configFileRaw, profile);
   const jobName = scheduleName(profile);
 
-  if (!ensureCronRunning()) {
+  if (!ensureCronRunning(port)) {
     fail("could not reach the uptime scheduler. Try `aux4 uptime start` first.", 5);
   }
 
@@ -919,24 +939,26 @@ function cmdSchedule(params) {
   if (profile) runCmd += ` --config ${profile}`;
   const res = spawnSync(
     "aux4",
-    ["cron", "add", "--port", CRON_PORT, "--name", jobName, "--every", String(interval), "--run", runCmd],
+    ["cron", "add", "--port", port, "--name", jobName, "--every", String(interval), "--run", runCmd],
     { encoding: "utf8" }
   );
   if (res.status !== 0) {
     fail(`could not schedule. ${(res.stderr || res.stdout || "").trim()}`, 5);
   }
-  process.stdout.write(`Scheduled "${jobName}" every ${interval}.\n`);
+  process.stdout.write(`Scheduled "${jobName}" every ${interval} (port ${port}).\n`);
   process.stdout.write(`  runs: ${runCmd}\n`);
   process.stdout.write("Note: after a machine reboot, run `aux4 uptime start` to bring the scheduler back up.\n");
 }
 
 function cmdUnschedule(params) {
   const profile = opt(params, "config", "");
+  const configFile = opt(params, "configFile", "uptime.yaml");
+  const port = resolveCronPort(params, configFile, profile);
   const jobName = scheduleName(profile);
-  if (!cronReachable()) {
+  if (!cronReachable(port)) {
     fail("the uptime scheduler is not running (nothing to unschedule). Start it with `aux4 uptime start`.", 5);
   }
-  const res = spawnSync("aux4", ["cron", "remove", "--port", CRON_PORT, "--name", jobName], { encoding: "utf8" });
+  const res = spawnSync("aux4", ["cron", "remove", "--port", port, "--name", jobName], { encoding: "utf8" });
   if (res.status !== 0) {
     fail(`could not unschedule. ${(res.stderr || res.stdout || "").trim()}`, 5);
   }

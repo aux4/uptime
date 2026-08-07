@@ -9,10 +9,11 @@ When you scope with `--config <profile>`, the schedule targets that profile's mo
 #### Usage
 
 ```bash
-aux4 uptime schedule [--interval <every>] [--configFile <file>] [--db <file>] [--config <profile>]
+aux4 uptime schedule [--interval <every>] [--port <port>] [--configFile <file>] [--db <file>] [--config <profile>]
 ```
 
 --interval    How often to probe, e.g. '5 min', '2 hours', '30s' (default: 5 min).
+--port        Scheduler cron daemon port (default: registry `port`, else 8422). Set it to share an existing cron daemon.
 --configFile  Registry YAML file that stores the monitors (default: uptime.yaml).
 --db          aux4/repository database file where checks are stored (default: ~/.aux4.config/uptime.db).
 --config      Scope the registry and stored checks under a named profile; names the cron job per profile.
