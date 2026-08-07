@@ -8,5 +8,5 @@
 - **Probe + record** — `check` (one monitor) and `check-all` (all; the scheduled command) probe and store every result in aux4/repository, with response time and a per-probe timeout. URL probes use `aux4 curl request --status --maxTime`.
 - **Status** — `status` shows current up/down, last result, response time, and rolling uptime for one monitor or all; pass `--chart` to also draw the strips.
 - **Charts** — `chart` renders the status-page-style uptime strip via aux4/chart. With `--name` it charts that monitor; without, it charts every monitor (one strip each, titled by name), inline in the terminal by default or to files with `--output`. Daily and per-check aggregation; days with no data render neutral.
-- **Scheduling** — `schedule` / `unschedule` wrap aux4/cron to run `check-all` on an interval (per-profile jobs).
+- **Scheduling** — `start` / `stop` manage a dedicated aux4/cron scheduler daemon (its own port, so stopping never touches other cron jobs); `schedule` / `unschedule` register recurring `check-all` runs on an interval (per-profile jobs).
 - **Alerting** — set `alertAfter` plus `onAlert` / `onRecover` command hooks (globally or per-monitor) to be notified on consecutive failures and recovery. Hooks run through aux4/jobs with the check context in `$UPTIME_*` environment variables, edge-triggered so a sustained outage alerts once.

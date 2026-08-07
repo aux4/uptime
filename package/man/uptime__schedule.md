@@ -1,8 +1,8 @@
 #### Description
 
-The `schedule` command sets up recurring monitoring by registering a `check-all` run with `aux4/cron`. It ensures the cron daemon is running and registers a job named `uptime-check` that probes every monitor at `--interval`. Intervals are human-readable: `30s`, `5 min` (the default), `2 hours`, etc.
+The `schedule` command sets up recurring monitoring by registering a `check-all` run with `aux4/cron`. It starts the uptime scheduler if needed (see `aux4 uptime start`) and registers a job named `uptime-check` that probes every monitor at `--interval`. Intervals are human-readable: `30s`, `5 min` (the default), `2 hours`, etc.
 
-> The cron daemon lives in a background process. After a machine reboot it must be started again (`aux4 cron start`); while it is down, no checks run.
+> The scheduler runs in a background daemon that does not survive a machine reboot. After a reboot, run `aux4 uptime start` to bring it back up; while it is down, no checks run.
 
 When you scope with `--config <profile>`, the schedule targets that profile's monitors and stored checks, and the cron job is named per profile so profiles can be scheduled independently.
 

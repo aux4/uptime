@@ -23,3 +23,9 @@ test/*.png
 
 # IDE
 .idea
+
+# Runtime artifacts from aux4/jobs & aux4/cron during tests
+test/.jobs
+.jobs
+.cron.json
+.cron-history.json

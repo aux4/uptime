@@ -60,7 +60,7 @@ already exists
 ## remove
 
 ```afterAll
-rm -f rm.yaml
+rm -f rm.yaml keep.yaml
 ```
 
 ### should remove a monitor
@@ -82,6 +82,26 @@ aux4 uptime remove --name nope --configFile rm.yaml
 
 ```error:partial
 no monitor named "nope"
+```
+
+### removing one monitor preserves the global alert fields
+
+```execute
+aux4 uptime add --url https://a.com --name a --configFile keep.yaml >/dev/null && aux4 uptime add --url https://b.com --name b --configFile keep.yaml >/dev/null && aux4 config set --name alertAfter --value 3 --file keep.yaml >/dev/null && aux4 uptime remove --name a --configFile keep.yaml >/dev/null && aux4 config get alertAfter --file keep.yaml
+```
+
+```expect
+3
+```
+
+### and the other monitor survives the removal
+
+```execute
+aux4 uptime list --configFile keep.yaml | grep -o '"name":"b"'
+```
+
+```expect
+"name":"b"
 ```
 
 ## profiles (--config)

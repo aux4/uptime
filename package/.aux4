@@ -18,6 +18,7 @@
     "aux4/curl",
     "aux4/chart",
     "aux4/cron",
+    "aux4/jobs",
     "aux4/config"
   ],
   "system": [
@@ -301,12 +302,30 @@
           }
         },
         {
+          "name": "start",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs start value(*)"
+          ],
+          "help": {
+            "text": "Start the uptime scheduler — the aux4/cron daemon (on a dedicated port) that runs the scheduled checks. Idempotent. Run this once, and again after a machine reboot, so scheduled checks keep firing."
+          }
+        },
+        {
+          "name": "stop",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs stop value(*)"
+          ],
+          "help": {
+            "text": "Stop the uptime scheduler daemon. Scheduled checks stop firing; the schedule entries persist and resume when you start it again. Only affects uptime's scheduler, not other aux4/cron jobs."
+          }
+        },
+        {
           "name": "schedule",
           "execute": [
             "node ${packageDir}/lib/uptime.mjs schedule value(*)"
           ],
           "help": {
-            "text": "Schedule recurring `check-all` runs via aux4/cron. Ensures the cron daemon is running and registers a job named 'uptime-check'. The daemon must be restarted after a machine reboot.",
+            "text": "Schedule recurring `check-all` runs via aux4/cron. Starts the uptime scheduler if needed and registers a job named 'uptime-check' (per-profile when --config is used). After a machine reboot, run `aux4 uptime start` to bring the scheduler back up.",
             "variables": [
               {
                 "name": "interval",

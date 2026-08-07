@@ -102,6 +102,8 @@ For command checks, `--exit` overrides the healthy exit code (default `0`). A nu
 | `aux4 uptime check-all` | Probe every monitor (the scheduled command) |
 | `aux4 uptime status [--name <name>] [--chart]` | Current up/down + rolling uptime (with `--chart`, also the strips) |
 | `aux4 uptime chart [--name <name>]` | Render the uptime strip(s) — all monitors by default |
+| `aux4 uptime start` | Start the scheduler daemon (run after each reboot) |
+| `aux4 uptime stop` | Stop the scheduler daemon |
 | `aux4 uptime schedule --interval <every>` | Schedule recurring checks via cron |
 | `aux4 uptime unschedule` | Remove the schedule |
 
@@ -189,11 +191,20 @@ Checks are stored with [`aux4/repository`](https://hub.aux4.io/aux4/repository) 
 
 With `--name` it charts that monitor; **without `--name` it charts every registered monitor** — one strip each, titled by name. It previews **inline in the terminal by default** (Ghostty, Kitty, iTerm2); pass `--output uptime.png` to save instead (the monitor name is inserted into the filename when charting several). `aux4 uptime status --chart` prints the status table plus the same strips.
 
-## Scheduling
+## Scheduling & the cron daemon
 
-`aux4 uptime schedule --interval "5 min"` starts the [`aux4/cron`](https://hub.aux4.io/aux4/cron) daemon (if needed) and registers a job named `uptime-check` that runs `uptime check-all`. Intervals accept `30s`, `5 min`, `2 hours`, etc.
+Scheduled checks run on the **uptime scheduler** — a dedicated [`aux4/cron`](https://hub.aux4.io/aux4/cron) daemon that uptime manages for you. Because it runs on its own directory (`~/.aux4.config/uptime`) and port (`8422`, separate from cron's default `8421`), `uptime stop` only ever affects uptime's schedule, never other cron jobs.
 
-> The cron daemon lives in a background process. After a machine reboot it must be started again (`aux4 cron start`); while it is down, no checks run.
+```bash
+aux4 uptime start                        # start the scheduler daemon (idempotent)
+aux4 uptime schedule --interval "5 min"  # register a recurring check-all (starts the scheduler if needed)
+aux4 uptime unschedule                   # remove the schedule
+aux4 uptime stop                         # stop the scheduler daemon
+```
+
+Intervals are human-readable: `30s`, `5 min`, `2 hours`, etc. With `--config <profile>`, the cron job is named per profile (`uptime-check-<profile>`) so profiles schedule independently.
+
+> The scheduler is a background daemon and **does not survive a machine reboot**. After a reboot, run `aux4 uptime start` to bring it back up; while it is down, no checks run. (You can inspect it directly with `aux4 cron list --port 8422`.)
 
 ## License
 
