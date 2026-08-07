@@ -1,0 +1,20 @@
+{
+  "name": "@aux4/uptime",
+  "version": "0.0.1",
+  "description": "Monitor URL uptime from the command line — probe, record, and chart status",
+  "type": "module",
+  "preferGlobal": true,
+  "scripts": {
+    "build": "node scripts/build.js"
+  },
+  "keywords": [
+    "aux4",
+    "cli",
+    "uptime",
+    "monitor",
+    "status",
+    "healthcheck"
+  ],
+  "author": "aux4 LLC",
+  "license": "Apache-2.0"
+}

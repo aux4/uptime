@@ -1,0 +1,18 @@
+{
+  "profiles": [
+    {
+      "name": "main",
+      "commands": [
+        {
+          "name": "build",
+          "execute": [
+            "npm run build"
+          ],
+          "help": {
+            "text": "Copy the aux4/uptime entrypoint into package/lib"
+          }
+        }
+      ]
+    }
+  ]
+}

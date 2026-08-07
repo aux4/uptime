@@ -1,0 +1,341 @@
+{
+  "scope": "aux4",
+  "name": "uptime",
+  "version": "0.0.1",
+  "description": "Monitor URL uptime from the command line — register URLs, probe them on a schedule, record status, and chart it",
+  "license": "Apache-2.0",
+  "git": "https://github.com/aux4/uptime",
+  "tags": [
+    "aux4",
+    "uptime",
+    "monitor",
+    "status",
+    "healthcheck",
+    "chart"
+  ],
+  "dependencies": [
+    "aux4/repository",
+    "aux4/curl",
+    "aux4/chart",
+    "aux4/cron",
+    "aux4/config"
+  ],
+  "system": [
+    [
+      "test:node --version",
+      "brew:node",
+      "linux:nodejs"
+    ]
+  ],
+  "profiles": [
+    {
+      "name": "main",
+      "commands": [
+        {
+          "name": "uptime",
+          "execute": [
+            "profile:uptime"
+          ],
+          "help": {
+            "text": "Monitor URL uptime: register URLs, probe them on a schedule, record status, and chart it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "uptime",
+      "commands": [
+        {
+          "name": "add",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs add value(*)"
+          ],
+          "help": {
+            "text": "Register something to monitor: a URL (--url) or an arbitrary command (--command). For a URL, only --url is required and the name is derived from the host. For a command, --name is required and up is decided by the exit code (and optional --expect output match). Saved to the registry YAML file.",
+            "variables": [
+              {
+                "name": "url",
+                "text": "The URL to monitor (HTTP check). Provide this OR --command.",
+                "default": ""
+              },
+              {
+                "name": "command",
+                "text": "A command to run as the check (command check) — a DB query, a script, any aux4 command. Up when it exits 0 (see --expect/--exit). Provide this OR --url.",
+                "default": ""
+              },
+              {
+                "name": "name",
+                "text": "A short name for the monitor. Defaults to the URL host for --url; required for --command.",
+                "default": ""
+              },
+              {
+                "name": "expectedStatus",
+                "text": "URL check: which HTTP responses count as up. Accepts an exact code (200), a class (2XX), a numeric range (200-402), or a comma-separated union (200-399,405). Anything else — including timeouts and connection failures — is down.",
+                "default": "2XX"
+              },
+              {
+                "name": "expect",
+                "text": "Command check: an optional match on the command's output for it to count as up. Same notation as expectedStatus (200 / 2XX / 200-402), plus comparisons (>0, >=1, <100, =5), regex:<pattern>, or a plain substring.",
+                "default": ""
+              },
+              {
+                "name": "exit",
+                "text": "Command check: the exit code that counts as up.",
+                "default": "0"
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              }
+            ]
+          }
+        },
+        {
+          "name": "remove",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs remove value(*)"
+          ],
+          "help": {
+            "text": "Remove a registered monitor from the registry YAML file.",
+            "variables": [
+              {
+                "name": "name",
+                "text": "The monitor name to remove (required)."
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              }
+            ]
+          }
+        },
+        {
+          "name": "list",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs list value(*)"
+          ],
+          "help": {
+            "text": "List the registered monitors. Prints a table on a terminal, or a JSON array when piped.",
+            "variables": [
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              }
+            ]
+          }
+        },
+        {
+          "name": "check",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs check value(*)"
+          ],
+          "help": {
+            "text": "Probe one monitor now and record the result. Exits non-zero when the monitor is down.",
+            "variables": [
+              {
+                "name": "name",
+                "text": "The monitor name to check (required)."
+              },
+              {
+                "name": "timeout",
+                "text": "Per-probe timeout in milliseconds; a slower response is recorded as down.",
+                "default": "10000"
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "db",
+                "text": "aux4/repository database file where checks are stored.",
+                "default": "~/.aux4.config/uptime.db"
+              }
+            ]
+          }
+        },
+        {
+          "name": "check-all",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs check-all value(*)"
+          ],
+          "help": {
+            "text": "Probe every registered monitor and record each result. This is the command to schedule with `uptime schedule`. Always exits 0 so a single failing probe never aborts a scheduled run.",
+            "variables": [
+              {
+                "name": "timeout",
+                "text": "Per-probe timeout in milliseconds; a slower response is recorded as down.",
+                "default": "10000"
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "db",
+                "text": "aux4/repository database file where checks are stored.",
+                "default": "~/.aux4.config/uptime.db"
+              }
+            ]
+          }
+        },
+        {
+          "name": "status",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs status value(*)"
+          ],
+          "help": {
+            "text": "Show the current up/down state, last response, and rolling uptime for one monitor or all of them. Prints a table on a terminal, or JSON when piped. Pass --chart to also draw the uptime strip for each monitor (titled by its name); omit --name to show them all.",
+            "variables": [
+              {
+                "name": "name",
+                "text": "Limit to a single monitor. Omit for all monitors.",
+                "default": ""
+              },
+              {
+                "name": "chart",
+                "text": "Also render the uptime strip for each monitor in scope (titled by the monitor name). Inline in supported terminals, or to files with --output.",
+                "default": "false"
+              },
+              {
+                "name": "period",
+                "text": "With --chart: aggregation, 'daily' or 'check'.",
+                "default": "daily"
+              },
+              {
+                "name": "days",
+                "text": "With --chart and daily period: how many days the strip covers.",
+                "default": "90"
+              },
+              {
+                "name": "output",
+                "text": "With --chart: save the strip(s) to a file instead of previewing inline. For multiple monitors the monitor name is inserted into the filename.",
+                "default": ""
+              },
+              {
+                "name": "theme",
+                "text": "With --chart: visual theme, light or dark.",
+                "default": ""
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "db",
+                "text": "aux4/repository database file where checks are stored.",
+                "default": "~/.aux4.config/uptime.db"
+              }
+            ]
+          }
+        },
+        {
+          "name": "chart",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs chart value(*)"
+          ],
+          "help": {
+            "text": "Render the uptime status strip. With --name it charts that one monitor; without --name it charts EVERY registered monitor — one strip each, titled by name — so you see them all. Previews inline in the terminal by default (Ghostty, Kitty, iTerm2); pass --output to save to file(s) instead (the monitor name is added to the filename when charting several). Uses the aux4/chart `uptime` type.",
+            "variables": [
+              {
+                "name": "name",
+                "text": "Chart a single monitor. Omit to chart every registered monitor (one strip each).",
+                "default": ""
+              },
+              {
+                "name": "period",
+                "text": "Aggregation: 'daily' (one bar per day, uptime% = up/total that day) or 'check' (one bar per individual probe).",
+                "default": "daily"
+              },
+              {
+                "name": "days",
+                "text": "Daily period: how many days the strip covers (oldest on the left, today on the right).",
+                "default": "90"
+              },
+              {
+                "name": "bars",
+                "text": "Check period: how many of the most recent probes to show.",
+                "default": "90"
+              },
+              {
+                "name": "output",
+                "text": "Where the chart goes: a file path (.png or .svg) saves it; '-' writes raw bytes to stdout; omitting it previews inline.",
+                "default": ""
+              },
+              {
+                "name": "width",
+                "text": "Chart width in pixels.",
+                "default": ""
+              },
+              {
+                "name": "height",
+                "text": "Chart height in pixels.",
+                "default": ""
+              },
+              {
+                "name": "theme",
+                "text": "Visual theme: light or dark.",
+                "default": ""
+              },
+              {
+                "name": "format",
+                "text": "Output format override: png or svg.",
+                "default": ""
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "db",
+                "text": "aux4/repository database file where checks are stored.",
+                "default": "~/.aux4.config/uptime.db"
+              }
+            ]
+          }
+        },
+        {
+          "name": "schedule",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs schedule value(*)"
+          ],
+          "help": {
+            "text": "Schedule recurring `check-all` runs via aux4/cron. Ensures the cron daemon is running and registers a job named 'uptime-check'. The daemon must be restarted after a machine reboot.",
+            "variables": [
+              {
+                "name": "interval",
+                "text": "How often to probe, e.g. '5 min', '2 hours', '30s'.",
+                "default": "5 min"
+              },
+              {
+                "name": "configFile",
+                "text": "Registry YAML file that stores the monitors.",
+                "default": "uptime.yaml"
+              },
+              {
+                "name": "db",
+                "text": "aux4/repository database file where checks are stored.",
+                "default": "~/.aux4.config/uptime.db"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unschedule",
+          "execute": [
+            "node ${packageDir}/lib/uptime.mjs unschedule value(*)"
+          ],
+          "help": {
+            "text": "Remove the recurring 'uptime-check' schedule from aux4/cron."
+          }
+        }
+      ]
+    }
+  ]
+}
