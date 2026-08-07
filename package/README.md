@@ -96,6 +96,15 @@ For URL checks, `--expectBody` additionally requires the **response body** to ma
 aux4 uptime add --url https://api.example.com/health --expectedStatus 200 --expectBody 'regex:"status":\s*"ok"'
 ```
 
+To monitor an authenticated endpoint, pass request **headers** with `--header` (repeatable), stored on the monitor:
+
+```bash
+aux4 uptime add --url https://api.example.com/health --name api \
+  --header "Authorization: Bearer $TOKEN" --header "X-Api-Key: abc123"
+```
+
+> Headers are stored in the registry file in plain text — keep it readable only by you if they carry secrets.
+
 ## Commands
 
 | Command | What it does |

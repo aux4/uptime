@@ -90,6 +90,11 @@
                 "default": ""
               },
               {
+                "name": "header",
+                "text": "URL check: a request header as 'Name: Value' (e.g. 'Authorization: Bearer …'). Repeatable — pass --header multiple times to send several. Stored in the registry.",
+                "default": ""
+              },
+              {
                 "name": "config",
                 "text": "Scope the monitor under a named profile in the registry (config.<profile>). One file can hold several independent monitor sets.",
                 "default": ""

@@ -225,9 +225,17 @@ function nameFromUrl(url) {
 // Dispatch a monitor to the right probe: a `command` monitor runs an arbitrary
 // command (up = expected exit code, optionally an output match); otherwise it is
 // a URL monitor probed over HTTP. Both share the timer/timeout wrapper.
+// Normalize the --header input (aux4 may hand us a single string or an array of
+// them) into a clean list of "Name: Value" strings.
+function collectHeaders(h) {
+  if (h === undefined || h === null || h === "") return [];
+  const list = Array.isArray(h) ? h : [h];
+  return list.filter(x => x !== undefined && x !== null && String(x) !== "").map(String);
+}
+
 function runCheck(monitor, timeoutMs) {
   if (monitor.command) return probeCommand(monitor.command, monitor.expect, timeoutMs);
-  return probeUrl(monitor.url, monitor.expectedStatus || "2XX", timeoutMs, monitor.expectBody);
+  return probeUrl(monitor.url, monitor.expectedStatus || "2XX", timeoutMs, monitor.expectBody, monitor.headers);
 }
 
 // Run one `aux4 curl request` with a hard-kill backstop past its own --maxTime.
@@ -263,15 +271,17 @@ function curlRun(extraArgs, timeoutMs) {
 // Probe a URL. `curl request --status` prints just the numeric HTTP status
 // (exit 0 for any class) or empty on a transport failure (status 0 = down). When
 // `expectBody` is set and the status is good, a second fetch grabs the response
-// body and it must also match. Never rejects.
-async function probeUrl(url, expectedStatus, timeoutMs, expectBody) {
+// body and it must also match. Custom request headers (e.g. Authorization) are
+// passed through to curl. Never rejects.
+async function probeUrl(url, expectedStatus, timeoutMs, expectBody, headers) {
   const started = Date.now();
-  const statusRes = await curlRun(["--status", "true", url], timeoutMs);
+  const headerArgs = (headers || []).flatMap(h => ["--header", h]);
+  const statusRes = await curlRun([...headerArgs, "--status", "true", url], timeoutMs);
   const status = statusRes.timedOut || !/^\d+$/.test(statusRes.out) ? 0 : Number(statusRes.out);
   let up = !statusRes.timedOut && status !== 0 && outputMatches(status, expectedStatus) ? 1 : 0;
 
   if (up && expectBody) {
-    const bodyRes = await curlRun([url], timeoutMs);
+    const bodyRes = await curlRun([...headerArgs, url], timeoutMs);
     up = !bodyRes.timedOut && outputMatches(bodyRes.out, expectBody) ? 1 : 0;
   }
 
@@ -534,7 +544,10 @@ function cmdAdd(params) {
     monitor = { name, url, expectedStatus };
     const expectBody = opt(params, "expectBody", "");
     if (expectBody !== "") monitor.expectBody = expectBody;
-    summary = expectBody ? `${url} (expects ${expectedStatus}, body ${expectBody})` : `${url} (expects ${expectedStatus})`;
+    const headers = collectHeaders(params.header);
+    if (headers.length) monitor.headers = headers;
+    const extra = [expectBody ? `body ${expectBody}` : "", headers.length ? `${headers.length} header(s)` : ""].filter(Boolean).join(", ");
+    summary = `${url} (expects ${expectedStatus}${extra ? ", " + extra : ""})`;
   } else {
     monitor = { name, command };
     const exit = opt(params, "exit", "");
