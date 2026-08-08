@@ -388,26 +388,10 @@ function firstDefined(...vals) {
 }
 
 // Run a user-configured hook command through aux4/jobs (so it is tracked/logged
-// like any other background job), passing the check context as env vars. The
-// command references them as $UPTIME_NAME, $UPTIME_STATUS, etc.
-function dispatch(command, context) {
-  spawnSync("aux4", ["jobs", "run", command], {
-    env: { ...process.env, ...context },
-    stdio: "ignore"
-  });
-}
-
-function alertContext(monitor, result, fails) {
-  return {
-    UPTIME_NAME: String(monitor.name),
-    UPTIME_URL: String(monitor.url),
-    UPTIME_STATUS: String(result.httpStatus),
-    UPTIME_UP: String(result.up),
-    UPTIME_FAILS: String(fails),
-    UPTIME_RESPONSE_MS: String(result.responseMs),
-    UPTIME_EXPECTED: String(monitor.expectedStatus),
-    UPTIME_CHECKED_AT: String(result.checkedAt)
-  };
+// like any other background job). Hooks are plain commands with no injected
+// context — set them per-monitor (or write a self-contained global command).
+function dispatch(command) {
+  spawnSync("aux4", ["jobs", "run", command], { stdio: "ignore" });
 }
 
 // Decide whether this check crosses an alert edge and fire the matching hook.
@@ -430,7 +414,7 @@ function evaluateAlerts(db, monitor, globals, result) {
       if (Number(c.up)) break;
       fails += 1;
     }
-    if (onAlert && fails === threshold) dispatch(onAlert, alertContext(monitor, result, fails));
+    if (onAlert && fails === threshold) dispatch(onAlert);
   } else if (onRecover) {
     // Recovered: measure the down streak that preceded this up-check ([0]).
     let prevFails = 0;
@@ -438,7 +422,7 @@ function evaluateAlerts(db, monitor, globals, result) {
       if (Number(checks[i].up)) break;
       prevFails += 1;
     }
-    if (prevFails >= threshold) dispatch(onRecover, alertContext(monitor, result, prevFails));
+    if (prevFails >= threshold) dispatch(onRecover);
   }
 }
 

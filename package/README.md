@@ -151,34 +151,22 @@ Stored checks are scoped to the profile too, so profiles never mix — even in o
 
 ## Alerting on consecutive failures
 
-Get notified when a monitor stays down. Set an `alertAfter` threshold and an `onAlert` command (and optionally `onRecover`) — globally or per-monitor — in the registry:
+Get notified when a monitor stays down. Set an `alertAfter` threshold and an `onAlert` command (and optionally `onRecover`) — per-monitor (recommended) or globally — in the registry:
 
 ```yaml
 config:
-  alertAfter: 3
-  onAlert: "aux4 slack send --channel ops --text 'DOWN: $UPTIME_NAME ($UPTIME_STATUS) x$UPTIME_FAILS'"
-  onRecover: "aux4 slack send --channel ops --text 'RECOVERED: $UPTIME_NAME'"
   monitors:
     - name: api
       url: https://api.example.com/health
       expectedStatus: 200
-      alertAfter: 5          # per-monitor override
+      alertAfter: 3
+      onAlert:   "aux4 slack send --channel ops --text 'api is DOWN'"
+      onRecover: "aux4 slack send --channel ops --text 'api RECOVERED'"
 ```
 
 - `onAlert` fires **once**, on the check where consecutive failures first reach `alertAfter` (not every check after) — no alert storms.
 - `onRecover` fires once when the monitor comes back up after having alerted.
-- The hook runs through [`aux4/jobs`](https://hub.aux4.io/aux4/jobs) (so it is tracked/logged) with the check context as environment variables:
-
-  | Variable | Value |
-  |----------|-------|
-  | `$UPTIME_NAME` | monitor name |
-  | `$UPTIME_URL` | monitor URL |
-  | `$UPTIME_STATUS` | HTTP status (0 = unreachable) |
-  | `$UPTIME_UP` | 1 or 0 |
-  | `$UPTIME_FAILS` | consecutive failures |
-  | `$UPTIME_RESPONSE_MS` | latency in ms |
-  | `$UPTIME_EXPECTED` | the expectedStatus spec |
-  | `$UPTIME_CHECKED_AT` | ISO timestamp |
+- Hooks run through [`aux4/jobs`](https://hub.aux4.io/aux4/jobs) (so they're tracked/logged) as **plain commands** — no injected variables. Set them per-monitor so each command already says what it's about, or write a self-contained global `onAlert`/`onRecover`.
 
 The hook is just a command, so it can notify however you like — Slack, email (`aux4/gmail`), a webhook (`aux4/curl`), or enqueue to `aux4/queue` for durable delivery. `uptime` stays decoupled from any one channel.
 

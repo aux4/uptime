@@ -6,8 +6,8 @@
 rm -f /tmp/uptime-test-alert /tmp/uptime-test-recover
 aux4 uptime add --command "false" --name svc --configFile al.yaml >/dev/null
 aux4 config set --name alertAfter --value 2 --file al.yaml >/dev/null
-aux4 config set --name onAlert   --value 'printf "ALERT %s %s\n" "$UPTIME_NAME" "$UPTIME_FAILS" > /tmp/uptime-test-alert' --file al.yaml >/dev/null
-aux4 config set --name onRecover --value 'printf "RECOVER %s\n" "$UPTIME_NAME" > /tmp/uptime-test-recover' --file al.yaml >/dev/null
+aux4 config set --name onAlert   --value 'printf "ALERT svc\n" > /tmp/uptime-test-alert' --file al.yaml >/dev/null
+aux4 config set --name onRecover --value 'printf "RECOVER svc\n" > /tmp/uptime-test-recover' --file al.yaml >/dev/null
 # 1st down: fails=1 (no alert). 2nd down: fails=2 == threshold -> alert fires once.
 aux4 uptime check-all --configFile al.yaml --db al.db --timeout 4000 >/dev/null 2>&1
 aux4 uptime check-all --configFile al.yaml --db al.db --timeout 4000 >/dev/null 2>&1
@@ -34,7 +34,7 @@ cat /tmp/uptime-test-alert
 ```
 
 ```expect
-ALERT svc 2
+ALERT svc
 ```
 
 ### onRecover fires when the monitor comes back up
