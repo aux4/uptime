@@ -1,7 +1,7 @@
 {
   "scope": "aux4",
   "name": "uptime",
-  "version": "0.0.15",
+  "version": "0.0.1",
   "description": "Monitor URL uptime from the command line — register URLs, probe them on a schedule, record status, and chart it",
   "license": "Apache-2.0",
   "git": "https://github.com/aux4/uptime",
