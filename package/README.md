@@ -200,13 +200,29 @@ Checks are stored with [`aux4/repository`](https://hub.aux4.io/aux4/repository) 
 
 ### Retention & history
 
-Every check is written with a **retention ttl** (`--retention`, default **90 days**). Expired checks are automatically hidden from `status` and `chart`, so history never grows without bound and reads stay bounded to the window you actually query. To reclaim disk, physically delete expired rows:
+Every check is written with a **retention ttl** — how long that record is kept before it auto-expires. The default comes from `check-all`'s `--retention` (**90 days**), but each monitor can override it, so different services keep different history:
+
+```yaml
+config:
+  retention: 90                 # default for all monitors (or pass --retention)
+  monitors:
+    - name: api
+      url: https://api.example.com/health   # keeps 90 days
+    - name: audit
+      url: https://…
+      retention: 365            # this one keeps a year
+    - name: scratch
+      url: https://…
+      retention: 0              # keep forever
+```
+
+Expired checks are automatically hidden from `status` and `chart`, so history never grows without bound and reads stay bounded to the window you actually query. To reclaim disk, physically delete expired rows — each is removed at **its own** retention ttl:
 
 ```bash
 aux4 uptime prune            # aux4 repository clean under the hood
 ```
 
-`status --window <days>` (default 90) sets the rolling-uptime window and, together with the retention and per-chart bounds, means uptime only ever reads the slice of history it needs — not the whole table. Set `--retention 0` to keep checks forever.
+`aux4 uptime schedule` sets up a **daily prune automatically** (see below), so a scheduled monitor is self-maintaining. `status --window <days>` (default 90) is a separate, query-time knob for the rolling-uptime window — bounded by, but independent of, retention.
 
 ## Charting
 
@@ -223,12 +239,12 @@ Scheduled checks run on the **uptime scheduler** — a dedicated [`aux4/cron`](h
 
 ```bash
 aux4 uptime start                        # start the scheduler daemon (idempotent)
-aux4 uptime schedule --interval "5 min"  # register a recurring check-all (starts the scheduler if needed)
-aux4 uptime unschedule                   # remove the schedule
+aux4 uptime schedule --interval "5 min"  # register check-all + a daily prune (starts the scheduler if needed)
+aux4 uptime unschedule                   # remove both jobs
 aux4 uptime stop                         # stop the scheduler daemon
 ```
 
-Intervals are human-readable: `30s`, `5 min`, `2 hours`, etc. With `--config <profile>`, the cron job is named per profile (`uptime-check-<profile>`) so profiles schedule independently.
+`schedule` registers **two** cron jobs: `uptime-check` (runs `check-all` every `--interval`) and `uptime-prune` (runs `prune` every `--pruneEvery`, default `1 day`) — so a scheduled monitor probes *and* trims its own history. Disable the prune job with `--pruneEvery ""` (or `off`). `unschedule` removes both. Intervals are human-readable: `30s`, `5 min`, `2 hours`, etc. With `--config <profile>`, the jobs are named per profile (`uptime-check-<profile>`, `uptime-prune-<profile>`) so profiles schedule independently.
 
 **Choosing the port.** By default the scheduler owns port `8422` (dir `~/.aux4.config/uptime`). Override it with `--port`, or persist it in the registry so you set it once — resolution is **`--port` flag → registry `port` value → `8422`**:
 

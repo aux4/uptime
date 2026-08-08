@@ -27,10 +27,20 @@ aux4 uptime schedule --interval "10 min" --configFile sc.yaml --db sc.db >/dev/n
 "name":"uptime-check"
 ```
 
-### unschedule removes the job
+### schedule also registers the auto-prune job
 
 ```execute
-aux4 uptime unschedule >/dev/null 2>&1 && aux4 cron list --port 8422 | grep -c "uptime-check" || true
+aux4 cron list --port 8422 | grep -o '"name":"uptime-prune"'
+```
+
+```expect
+"name":"uptime-prune"
+```
+
+### unschedule removes both the check and prune jobs
+
+```execute
+aux4 uptime unschedule >/dev/null 2>&1 && aux4 cron list --port 8422 | grep -c "uptime-" || true
 ```
 
 ```expect

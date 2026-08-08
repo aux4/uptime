@@ -238,6 +238,16 @@ function runCheck(monitor, timeoutMs) {
   return probeUrl(monitor.url, monitor.expectedStatus || "2XX", timeoutMs, monitor.expectBody, monitor.headers);
 }
 
+// A monitor's own `retention` (days) overrides the run-wide default; 0 = keep
+// forever. Each check is then stamped with its monitor's retention ttl.
+function effectiveRetention(monitor, fallbackDays) {
+  if (monitor && monitor.retention !== undefined && monitor.retention !== null && monitor.retention !== "") {
+    const n = Number(monitor.retention);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallbackDays;
+}
+
 // Run one `aux4 curl request` with a hard-kill backstop past its own --maxTime.
 // Resolves to { out, timedOut }; never rejects.
 function curlRun(extraArgs, timeoutMs) {
@@ -560,6 +570,13 @@ function cmdAdd(params) {
     summary = `command \`${command}\` (up on ${rule})`;
   }
 
+  // Optional per-monitor retention (days) overriding the run-wide default.
+  const retention = opt(params, "retention", "");
+  if (retention !== "" && Number.isFinite(Number(retention))) {
+    monitor.retention = Number(retention);
+    summary += `, keep ${monitor.retention}d`;
+  }
+
   const cfg = readConfig(configFile, profile);
   if (findMonitor(cfg.monitors, name)) {
     fail(`a monitor named "${name}" already exists. Use --name to pick another, or remove it first.`, 3);
@@ -616,7 +633,7 @@ async function cmdCheck(params) {
   if (!monitor) fail(`no monitor named "${name}".`, 3);
 
   const result = await runCheck(monitor, timeout);
-  recordCheck(db, monitor, result, profile, retention);
+  recordCheck(db, monitor, result, profile, effectiveRetention(monitor, retention));
   evaluateAlerts(db, monitor, cfg, result);
   process.stdout.write(formatCheckLine(monitor, result) + "\n");
   process.exit(result.up ? 0 : 1);
@@ -639,7 +656,7 @@ async function cmdCheckAll(params) {
   const results = await Promise.all(cfg.monitors.map(m => runCheck(m, timeout)));
   cfg.monitors.forEach((monitor, i) => {
     const result = results[i];
-    recordCheck(db, monitor, result, profile, retention);
+    recordCheck(db, monitor, result, profile, effectiveRetention(monitor, retention));
     evaluateAlerts(db, monitor, cfg, result);
     process.stdout.write(formatCheckLine(monitor, result) + "\n");
   });
@@ -854,6 +871,15 @@ function scheduleName(profile) {
   return profile ? `uptime-check-${profile}` : "uptime-check";
 }
 
+function pruneJobName(profile) {
+  return profile ? `uptime-prune-${profile}` : "uptime-prune";
+}
+
+// A blank / off / 0 pruneEvery disables the auto-prune job.
+function pruneDisabled(pruneEvery) {
+  return /^(|off|none|false|0)$/i.test(String(pruneEvery == null ? "" : pruneEvery).trim());
+}
+
 // Resolve the scheduler port: an explicit --port wins, else a `port` value in
 // the registry (scoped to the profile via --config), else the default 8422.
 function resolveCronPort(params, configFile, profile) {
@@ -947,6 +973,24 @@ function cmdSchedule(params) {
   }
   process.stdout.write(`Scheduled "${jobName}" every ${interval} (port ${port}).\n`);
   process.stdout.write(`  runs: ${runCmd}\n`);
+
+  // Also schedule a periodic prune so expired checks are physically removed
+  // (each record is deleted at its own retention ttl). Opt out with --pruneEvery "".
+  const pruneEvery = opt(params, "pruneEvery", "1 day");
+  if (!pruneDisabled(pruneEvery)) {
+    const pruneCmd = `aux4 uptime prune --db ${db}`;
+    const pr = spawnSync(
+      "aux4",
+      ["cron", "add", "--port", port, "--name", pruneJobName(profile), "--every", String(pruneEvery), "--run", pruneCmd],
+      { encoding: "utf8" }
+    );
+    if (pr.status !== 0) {
+      process.stdout.write(`  (warning: could not schedule prune: ${(pr.stderr || pr.stdout || "").trim()})\n`);
+    } else {
+      process.stdout.write(`Scheduled "${pruneJobName(profile)}" every ${pruneEvery}.\n`);
+    }
+  }
+
   process.stdout.write("Note: after a machine reboot, run `aux4 uptime start` to bring the scheduler back up.\n");
 }
 
@@ -962,6 +1006,8 @@ function cmdUnschedule(params) {
   if (res.status !== 0) {
     fail(`could not unschedule. ${(res.stderr || res.stdout || "").trim()}`, 5);
   }
+  // Best-effort: also remove the companion prune job (it may not exist).
+  spawnSync("aux4", ["cron", "remove", "--port", port, "--name", pruneJobName(profile)], { stdio: "ignore" });
   process.stdout.write(`Removed schedule "${jobName}".\n`);
 }
 

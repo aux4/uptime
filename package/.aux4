@@ -95,6 +95,11 @@
                 "default": ""
               },
               {
+                "name": "retention",
+                "text": "Per-monitor retention in days — how long this monitor's checks are kept before auto-expiry (overrides check-all's --retention; 0 = keep forever).",
+                "default": ""
+              },
+              {
                 "name": "config",
                 "text": "Scope the monitor under a named profile in the registry (config.<profile>). One file can hold several independent monitor sets.",
                 "default": ""
@@ -461,6 +466,11 @@
                 "name": "port",
                 "text": "Scheduler cron daemon port. Defaults to a `port` value in the registry (per --config profile), else 8422. Override to run on a specific port (e.g. to share an existing cron daemon).",
                 "default": ""
+              },
+              {
+                "name": "pruneEvery",
+                "text": "How often to auto-prune expired checks, e.g. '1 day' (default). Set to '' or 'off' to disable the prune job.",
+                "default": "1 day"
               }
             ]
           }

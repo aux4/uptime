@@ -50,3 +50,35 @@ aux4 uptime status --name svc --window 1 --configFile rt.yaml --db rt.db | grep 
 ```expect
 "state":"up"
 ```
+
+## per-monitor retention overrides
+
+```beforeAll
+aux4 uptime add --command "true" --name forever --retention 0  --configFile pm.yaml >/dev/null
+aux4 uptime add --command "true" --name kept    --retention 30 --configFile pm.yaml >/dev/null
+aux4 uptime check-all --configFile pm.yaml --db pm.db >/dev/null 2>&1
+```
+
+```afterAll
+rm -f pm.yaml pm.db
+```
+
+### a monitor with retention 0 keeps checks forever (no ttl)
+
+```execute
+aux4 repository find checks --db pm.db --expr "name = 'forever'" --raw --render none | grep -c '"ttl"' || true
+```
+
+```expect
+0
+```
+
+### a monitor with its own retention stamps a ttl
+
+```execute
+aux4 repository find checks --db pm.db --expr "name = 'kept'" --raw --render none | grep -o '"ttl":[0-9]' | head -1
+```
+
+```expect
+"ttl":1
+```

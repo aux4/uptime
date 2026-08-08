@@ -23,6 +23,7 @@ aux4 uptime add --command <cmd> --name <name> [--expect <spec>] [--exit <code>] 
 --header          URL check: a request header as 'Name: Value' (e.g. 'Authorization: Bearer …'). Repeatable — pass --header multiple times. Stored in the registry.
 --expect          Command check: an optional match on the command's output — same notation as --expectedStatus, plus comparisons (>0, >=1, <100, =5), regex:<pattern>, or a plain substring.
 --exit            Command check: the exit code that counts as up (default: 0).
+--retention       Per-monitor retention in days — how long this monitor's checks are kept before auto-expiry (overrides check-all's --retention; 0 = keep forever).
 --configFile      Registry YAML file that stores the monitors (default: uptime.yaml).
 --config          Scope the registry (and stored checks) under a named profile, e.g. prod or test.
 
